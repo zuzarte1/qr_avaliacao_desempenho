@@ -6,7 +6,7 @@ url = "https://api.qulture.rocks/rest/companies/8378/surveys"
 
 headers = {
     "accept": "application/json",
-    "Authorization": f"Bearer {os.getenv("QR_API_KEY")}"
+    "Authorization": f"Bearer {os.getenv('QR_API_KEY')}"
 }
 
 response = requests.get(url, headers=headers)
@@ -28,10 +28,5 @@ df['end_at'] = pd.to_datetime(df['end_at'])
 
 df['start_at'] = df['start_at'].dt.tz_localize(None)
 df['end_at'] = df['end_at'].dt.tz_localize(None)
-
-
-print(type(df['start_at'][0]))
-print(type(df['end_at'][0]))
-
 
 df.to_excel("surveys.xlsx", index=False)

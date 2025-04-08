@@ -6,7 +6,7 @@ url = "https://api.qulture.rocks/rest/companies/8378/surveys/102617/topics?inclu
 
 headers = {
     "accept": "application/json",
-    "Authorization": f"Bearer {os.getenv("QR_API_KEY")}"
+    "Authorization": f"Bearer {os.getenv('QR_API_KEY')}"
 }
 
 response = requests.get(url, headers=headers)
