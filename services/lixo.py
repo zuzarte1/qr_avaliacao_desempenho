@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 
-url = "https://api.qulture.rocks/rest/companies/8378/surveys/102617/participants"
+url = "https://res.cloudinary.com/qulture/(/:locale)/api_integration/contracts"
 
 headers = {
     "accept": "application/json",
@@ -9,8 +9,8 @@ headers = {
 }
 
 response = requests.get(url, headers=headers)
-
-response = response.json()['participants']
+response = response.json()
 
 df = pd.DataFrame(response)
+
 df.to_excel('output.xlsx', index=False)

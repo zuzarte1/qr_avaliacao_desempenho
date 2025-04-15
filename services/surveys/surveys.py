@@ -22,8 +22,11 @@ df['grades_amount'] = df['settings'].apply(lambda x: x.get('grades_amount'))
 
 df = df.drop('settings', axis=1)
 
+print(type(df['start_at']))
 df['start_at'] = pd.to_datetime(df['start_at'])
 df['end_at'] = pd.to_datetime(df['end_at'])
+print(type(df['start_at']))
+
 
 
 df['start_at'] = df['start_at'].dt.tz_localize(None)
