@@ -1,16 +1,22 @@
-import requests
-import os
-import pandas as pd
+from surveys import surveys_main
+from topics import topics_main
+from answers import answers_main
+from participants import participants_main
 
-url = "https://api.qulture.rocks/rest/companies/8378/surveys/102617/topics?include=questions,question_topic"
+import time
 
-headers = {
-    "accept": "application/json",
-    "Authorization": f"Bearer {os.getenv("QR_API_KEY")}"
-}
+def main():
+    surveys = surveys_main()
+    surveys_ids = surveys['id'].tolist()
 
-response = requests.get(url, headers=headers)
-data = response.json()['topics']
-df = pd.DataFrame(data)
+    topics = topics_main(surveys_ids)
+    answers = answers_main(surveys_ids)
+    participants = participants_main()
 
-df.to_excel("topics.xlsx", index=False)
+    return answers
+
+
+if __name__ == "__main__":
+    start = time.time()
+    df = main()
+    print(f"Execution time: {time.time() - start:.2f} seconds")
