@@ -243,4 +243,3 @@ __typename
 
 if __name__ == "__main__":
     df = main()
-    df.to_excel("participants.xlsx", index=False)

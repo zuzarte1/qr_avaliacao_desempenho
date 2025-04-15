@@ -2,34 +2,65 @@ import requests
 import os
 import pandas as pd
 
-url = "https://api.qulture.rocks/rest/companies/8378/surveys"
+import asyncio
+import aiohttp
 
-headers = {
-    "accept": "application/json",
-    "Authorization": f"Bearer {os.getenv('QR_API_KEY')}"
-}
+async def fetch(url, headers, page, session):
+    headers["page"] = str(page)
+    async with session.get(url, headers=headers) as response:
+        if response.status == 200:
+            return await response.json()
+        else:
+            print(f"Error fetching page {page}: {response.status}")
+            return None
+    
+async def fetch_all(url, headers, pages, session):
+    tasks = []
+    for page in range(1, pages + 1):
+        tasks.append(fetch(url, headers, page, session))
+    return await asyncio.gather(*tasks)
 
-response = requests.get(url, headers=headers)
-data = response.json()['surveys']
-df = pd.DataFrame(data)
+async def get_pages(base_url, headers, session):
+    async with session.get(f"{base_url}surveys", headers=headers) as response:
+        headers = dict(response.headers)
+        pages = int(headers.get('total', '0')) // 100 + 1
+        return pages
+    
+async def async_main():
+    url = "https://api.qulture.rocks/rest/companies/8378/surveys"
+    headers = {
+        "accept": "application/json",
+        "Authorization": f"Bearer {os.getenv('QR_API_KEY')}",
+        "per_page": "100",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        pages = await get_pages(url, headers, session)
+        responses = await fetch_all(url, headers, pages, session)
+        data = [item for response in responses if response for item in response['surveys']]
 
-surveys_cols_to_keep = ['id', 'name', 'stage', 'settings', 'participants_count', 'draft']
-df = df[surveys_cols_to_keep]
+    return data
 
-df['start_at'] = df['settings'].apply(lambda x: x.get('answer_period').get('start_at'))
-df['end_at'] = df['settings'].apply(lambda x: x.get('answer_period').get('end_at'))
-df['grades_amount'] = df['settings'].apply(lambda x: x.get('grades_amount'))
+def main():
+    data = asyncio.run(async_main())
+    df = pd.DataFrame(data)
 
-df = df.drop('settings', axis=1)
+    surveys_cols_to_keep = ['id', 'name', 'stage', 'settings', 'participants_count', 'draft']
+    df = df[surveys_cols_to_keep]
 
-print(type(df['start_at']))
-df['start_at'] = pd.to_datetime(df['start_at'])
-df['end_at'] = pd.to_datetime(df['end_at'])
-print(type(df['start_at']))
+    df['start_at'] = df['settings'].apply(lambda x: x.get('answer_period').get('start_at'))
+    df['end_at'] = df['settings'].apply(lambda x: x.get('answer_period').get('end_at'))
+    df['grades_amount'] = df['settings'].apply(lambda x: x.get('grades_amount'))
 
+    df = df.drop('settings', axis=1)
 
+    df['start_at'] = pd.to_datetime(df['start_at'])
+    df['end_at'] = pd.to_datetime(df['end_at'])
 
-df['start_at'] = df['start_at'].dt.tz_localize(None)
-df['end_at'] = df['end_at'].dt.tz_localize(None)
+    df['start_at'] = df['start_at'].dt.tz_localize(None)
+    df['end_at'] = df['end_at'].dt.tz_localize(None)
+    return df
 
-df.to_excel("surveys.xlsx", index=False)
+if __name__ == "__main__":
+    print(main())
