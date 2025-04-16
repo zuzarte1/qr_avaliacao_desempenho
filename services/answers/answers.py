@@ -5,9 +5,20 @@ import pandas as pd
 import time
 
 MAX_RETRIES = 5
-SEMAPHORE = asyncio.Semaphore(30)  # Limita 5 conexões simultâneas
+# Limita até 30 requisições simultâneas (boa prática de controle de concorrência)
+SEMAPHORE = asyncio.Semaphore(30)
 
-async def fetch_with_retry(url, headers, page, session, params=None):
+async def fetch_with_retry(
+    url: str,
+    headers: dict,
+    page: int,
+    session: aiohttp.ClientSession,
+    params: dict = None
+) -> dict:
+    """
+    Tenta buscar a página `page` no endpoint `url`, com retries exponenciais enquanto o status code não for 200.
+    Em caso de 429, respeita o Retry-After ou faz backoff exponencial.
+    """
     backoff_base = 2
     task_params = params.copy() if params else {}
     task_params["page"] = str(page)
@@ -16,40 +27,63 @@ async def fetch_with_retry(url, headers, page, session, params=None):
         async with SEMAPHORE:
             try:
                 async with session.get(url, headers=headers.copy(), params=task_params) as response:
-                    print(f"Fetching page {page}, attempt {attempt}...")
-                    print(f"Response status: {response.status}")
-                    if response.status == 200:
+                    status = response.status
+                    print(f"Fetching page {page}, attempt {attempt}, status {status}...")
+                    if status == 200:
                         return await response.json()
-                    elif response.status == 429:
+
+                    # Define tempo de espera
+                    if status == 429:
                         retry_after = int(response.headers.get("Retry-After", backoff_base ** attempt))
                         print(f"[429] Page {page}, attempt {attempt} — retrying in {retry_after}s...")
-                        await asyncio.sleep(retry_after)
                     else:
-                        print(f"[{response.status}] Error fetching page {page}")
-                        return {}
+                        retry_after = backoff_base ** attempt
+                        print(f"[{status}] Page {page}, attempt {attempt} — retrying in {retry_after}s...")
+
+                    await asyncio.sleep(retry_after)
             except Exception as e:
-                print(f"[Exception] Page {page}, attempt {attempt}: {e}")
-                await asyncio.sleep(backoff_base ** attempt)
+                retry_after = backoff_base ** attempt
+                print(f"[Exception] Page {page}, attempt {attempt}: {e} — retrying in {retry_after}s...")
+                await asyncio.sleep(retry_after)
 
     print(f"Failed to fetch page {page} after {MAX_RETRIES} attempts.")
     return {}
 
-async def fetch_all(url, headers, pages, session, params=None):
-    tasks = [fetch_with_retry(url, headers, page, session, params=params) for page in range(1, pages + 1)]
+async def fetch_all(
+    url: str,
+    headers: dict,
+    pages: int,
+    session: aiohttp.ClientSession,
+    params: dict = None
+) -> list:
+    """
+    Dispara fetch_with_retry para todas as páginas de 1 a `pages`.
+    """
+    tasks = [fetch_with_retry(url, headers, page, session, params) for page in range(1, pages + 1)]
     return await asyncio.gather(*tasks)
 
-async def get_pages(base_url, headers, session, params=None):
+async def get_pages(
+    base_url: str,
+    headers: dict,
+    session: aiohttp.ClientSession,
+    params: dict = None
+) -> int:
+    """
+    Busca no header 'total' o número total de itens e calcula quantas páginas existem.
+    """
     try:
         async with session.get(f"{base_url}answers", headers=headers.copy(), params=params) as response:
-            headers_resp = dict(response.headers)
-            total_items = int(headers_resp.get('total', '0'))
+            total_items = int(response.headers.get('total', '0'))
             return (total_items // 100) + (1 if total_items % 100 else 0)
     except Exception as e:
         print(f"[get_pages] Error: {e}")
         return 0
 
-async def async_main(surveys_ids):
-    url_template = "https://api.qulture.rocks/rest/companies/8378/surveys/{survey_id}/answers"
+async def async_main(survey_id: int) -> list:
+    """
+    Fluxo assíncrono para um único survey_id. Retorna lista de JSONs por página.
+    """
+    url = f"https://api.qulture.rocks/rest/companies/8378/surveys/{survey_id}/answers"
     params = {
         "include": "participant,reviewer",
         "per_page": "100",
@@ -60,39 +94,35 @@ async def async_main(surveys_ids):
         "user-agent": "Mozilla/5.0",
     }
 
-    urls = [url_template.format(survey_id=survey_id) for survey_id in surveys_ids]
-
     async with aiohttp.ClientSession() as session:
-        pages_per_url = await asyncio.gather(*[
-            get_pages(url.rsplit("/answers", 1)[0] + "/", headers, session, params) for url in urls
-        ])
+        pages = await get_pages(url.rsplit("/answers", 1)[0] + "/", headers, session, params)
+        if pages <= 0:
+            return []
+        data_pages = await fetch_all(url, headers, pages, session, params)
+    return data_pages
 
-        fetch_tasks = [
-            fetch_all(url, headers, pages, session, params=params)
-            for url, pages in zip(urls, pages_per_url) if pages > 0
-        ]
-        data = await asyncio.gather(*fetch_tasks)
-    return data
 
-def main(surveys_ids):
-    data = asyncio.run(async_main(surveys_ids))
+def main(survey_id: int) -> pd.DataFrame:
+    """
+    Executa o fluxo assíncrono e retorna um DataFrame com todas as respostas.
+    """
+    start = time.time()
+    data = asyncio.run(async_main(survey_id))
 
     answers = []
-    for item in data:
-        if not item:
-            continue
-        for page in item:
-            for answer in page.get("answers", []):
-                answers.append(answer)
+    for page in data:
+        for answer in page.get("answers", []):
+            answers.append(answer)
 
     if not answers:
         print("Nenhuma resposta encontrada.")
         return pd.DataFrame()
 
     df = pd.DataFrame(answers)
-    answers_cols_to_keep = ['id', 'grading', 'question_id', 'comment', 'participant_id', 'participant']
-    df = df[answers_cols_to_keep]
+    cols = ['id', 'grading', 'question_id', 'comment', 'participant_id', 'participant']
+    df = df[cols]
 
+    # Extrai campos aninhados
     df['survey_id'] = df['participant'].apply(lambda x: x.get('survey_id'))
     df['survey_participation_id'] = df['participant'].apply(lambda x: x.get('survey_participation_id'))
     df['reviewer'] = df['participant'].apply(lambda x: x.get('reviewer'))
@@ -101,16 +131,15 @@ def main(surveys_ids):
     df['reviewer_id'] = df['reviewer'].apply(lambda x: x.get('id') if x else None)
     df['user'] = df['reviewer'].apply(lambda x: x.get('user') if x else None)
     df['reviewer_name'] = df['user'].apply(lambda x: x.get('name') if x else None)
-
     df = df.drop(columns=['participant', 'reviewer', 'user'])
 
+    print(f"Tempo total: {time.time() - start:.2f} segundos")
     return df
 
 if __name__ == "__main__":
-    start = time.time()
-    surveys_ids = [102617, 101216]
-    df = main(surveys_ids)
-    print(f"Tempo total: {time.time() - start:.2f} segundos")
+    # Uso para um único ID de survey
+    survey_id = 102617
+    df = main(survey_id)
     if not df.empty:
         df.to_excel("answers.xlsx", index=False)
         print("Arquivo salvo com sucesso.")

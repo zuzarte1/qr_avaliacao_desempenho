@@ -42,10 +42,11 @@ async def async_main():
 
     return data
 
-def main():
+def main(survey_id):
     data = asyncio.run(async_main())
     df = pd.DataFrame(data)
 
+    df = df[df["id"] == survey_id]
     surveys_cols_to_keep = ['id', 'name', 'stage', 'settings', 'participants_count', 'draft']
     df = df[surveys_cols_to_keep]
 
@@ -63,4 +64,6 @@ def main():
     return df
 
 if __name__ == "__main__":
-    print(main())
+    survey_id = 102617
+    df = main(survey_id)
+    print(df.head())
