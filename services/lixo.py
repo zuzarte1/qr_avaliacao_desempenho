@@ -1,1 +1,0 @@
-from participants import participants_main

@@ -90,4 +90,4 @@ if __name__ == "__main__":
     # Exemplo de uso com um único ID
     survey_id = 102617
     df_questions = main(survey_id)
-    df_questions.to_excel("questions.xlsx", index=False)
+

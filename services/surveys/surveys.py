@@ -66,4 +66,8 @@ def main(survey_id):
 if __name__ == "__main__":
     survey_id = 102617
     df = main(survey_id)
-    print(df.head())
+    if not df.empty:
+        df.to_excel("surveys.xlsx", index=False)
+        print("Arquivo salvo com sucesso.")
+    else:
+        print("DataFrame vazio.")
