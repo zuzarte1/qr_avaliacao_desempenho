@@ -243,6 +243,8 @@ __typename
 
 if __name__ == "__main__":
     df = main()
+    df['id'] = df['id'].astype('int64')
+
     if not df.empty:
         df.to_excel("participants.xlsx", index=False)
         print("Arquivo salvo com sucesso.")

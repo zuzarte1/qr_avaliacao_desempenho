@@ -132,6 +132,7 @@ def main(survey_id: int) -> pd.DataFrame:
     df['user'] = df['reviewer'].apply(lambda x: x.get('user') if x else None)
     df['reviewer_name'] = df['user'].apply(lambda x: x.get('name') if x else None)
     df = df.drop(columns=['participant', 'reviewer', 'user'])
+    print(df.dtypes)
 
     print(f"Tempo total: {time.time() - start:.2f} segundos")
     return df
