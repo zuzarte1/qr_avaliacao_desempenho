@@ -67,6 +67,27 @@ def main(survey_id):
     df_merged = pd.merge(df_merged, topics, left_on='answers_question_id', right_on='topics_question_id', how='left')
     df_merged = pd.merge(df_merged, participants, left_on='answers_reviewee_id', right_on='participants_id', how='left')
     df_merged = pd.merge(df_merged, df_employees_merge, left_on='participants_id', right_on='participants_id', how='left')
+    
+    cols_to_rename = {
+        'answers_grading': 'Notas',
+        'answers_comment': 'Comentário da resposta',
+        'answers_relationship': 'Direção',
+        'answers_reviewer_name': 'Nome do Avaliador',
+        'surveys_name': 'Título da Pesquisa',
+        'surveys_start_at': 'Início da Pesquisa',
+        'surveys_end_at': 'Fim da Pesquisa', 
+        'topics_question_name': 'Competência', 
+        'participants_name_x': 'Nome do Avaliado', 
+        'participants_email_x': 'E-mail do Avaliado',
+        'participants_supervisor_name_x': 'Nome do Líder Imediato',
+        'participants_supervisor_email_x': 'E-mail do Líder Imediato',
+        'teamleader_value': 'Nome do Team Leader',
+        'coordenador_value': 'Nome do Coordenador',
+        'heads_value': 'E-mail do Head',
+    }
+
+    df_merged.rename(columns=cols_to_rename, inplace=True)
+
     df_merged.to_excel('merge.xlsx', index=False)
 
     return answers
